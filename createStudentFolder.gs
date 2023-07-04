@@ -1,79 +1,62 @@
 function createFoldersFromSpreadsheet() {
-  // Spreadsheet containing student names
-  var studentNamesSpreadsheetId = '1Y2RCgVLXR1JB36mG0NQxII9U0fRYqv9BmBHbhm7MmXo';
-
-  // Template files
-  var templateDocId = 'your-template-doc-id'; // Replace with your Google Docs template file ID
-  var templateSheetId = 'your-template-sheet-id'; // Replace with your Google Sheets template file ID
-
-  // Get all sheets in the spreadsheet
-  var sheets = SpreadsheetApp.openById(studentNamesSpreadsheetId).getSheets();
-
-  // Get or create 'Students' folder in the root
+  var spreadsheetId = '1h5a6C-gE2x9E29156GpmBPASpzrZ7hrfHBKSkluLpAw';
+  var templateSheetId = '1DPyIocv62_mobQJURpg7y2DTRx920joiOoGY_XE0GJc';  // Add your Google Sheets template ID here
   var root = DriveApp.getRootFolder();
-  var studentsFolderIterator = root.getFoldersByName('Students');
-  var studentsFolder;
-  if (studentsFolderIterator.hasNext()) {
-    studentsFolder = studentsFolderIterator.next();
-  } else {
-    studentsFolder = root.createFolder('Students');
+  var newStudentFolder = root.getFoldersByName('New Student Folder').hasNext() ? root.getFoldersByName('New Student Folder').next() : root.createFolder('New Student Folder');
+
+  var spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  var sheets = spreadsheet.getSheets();
+
+  var codeSetupSheet = spreadsheet.getSheetByName('Code Setup');
+  var codeSetupData = codeSetupSheet.getRange('A2:B' + codeSetupSheet.getLastRow()).getValues();
+  var teacherTemplates = {};
+
+  for (var i = 0; i < codeSetupData.length; i++) {
+    var row = codeSetupData[i];
+    teacherTemplates[row[0]] = row[1];
   }
 
-  // Iterate over sheets
   for (var i = 0; i < sheets.length; i++) {
     var sheet = sheets[i];
-    var sheetName = sheet.getName();
+    if(sheet.getName() === 'Code Setup') continue;
 
-    // Determine the parent folder based on the sheet name
-    var parentFolderName;
-    var prefix;
-    if (sheetName === 'Regular') {
-      parentFolderName = 'Regular';
-      prefix = '';
-    } else if (sheetName === 'Multiple') {
-      parentFolderName = 'Multiple';
-      prefix = 'M';
-    } else if (sheetName === 'Kids') {
-      parentFolderName = 'Kids';
-      prefix = 'K';
-    } else {
-      continue; // Skip sheets with other names
-    }
+    var dataRange = sheet.getDataRange();
+    var data = dataRange.getValues();
 
-    // Get or create parent folder
-    var parentFolderIterator = studentsFolder.getFoldersByName(parentFolderName);
-    var parentFolder;
-    if (parentFolderIterator.hasNext()) {
-      parentFolder = parentFolderIterator.next();
-    } else {
-      parentFolder = studentsFolder.createFolder(parentFolderName);
-    }
+    var prefix = sheet.getName() === 'Regular' ? '0' : (sheet.getName() === 'Multiple' ? 'M' : (sheet.getName() === 'Kids' ? 'K' : undefined));
 
-    // Get student names from the current sheet
-    var studentNames = sheet.getRange('A:A').getValues(); // Assumes student names are in column A
+    if (prefix) {
+      for (var j = 1; j < data.length; j++) { // changed from j=0 to j=1 to skip the headers
+        var row = data[j];
+        var name = row[0];
+        var teacherName = row[1];
+        var lessonStatus = row[2] ? row[2].trim().toLowerCase() : null; // make sure row[2] is not undefined
 
-    // Iterate over student names
-    for (var j = 0; j < studentNames.length; j++) {
-      var studentName = studentNames[j][0];
-      if (studentName) { // Skip empty rows
-        // Format the folder name. Pad the student number with leading zeros.
-        var studentNumber = String(j + 1).padStart(3, '0'); // add 1 to index because spreadsheet row numbers start from 1
-        var folderName = prefix + studentNumber + ' ' + studentName;
+        // If either the student name or the teacher name is blank, or lessonStatus is "finished", stop processing
+        if (!name || !teacherName || lessonStatus === "finished") {
+          continue;
+        }
 
-        // Check if folder already exists in parent folder
-        var folders = parentFolder.getFoldersByName(folderName);
-        if (!folders.hasNext()) { // If the folder does not exist, create it
-          var studentFolder = parentFolder.createFolder(folderName);
+        var folderName = prefix + String(j).padStart(3, '0') + ' ' + name;
+        var folders = newStudentFolder.getFoldersByName(folderName);
 
-          // Create sub-folders
-          studentFolder.createFolder(studentName + "'s Lesson Notes");
-          studentFolder.createFolder(studentName + "'s Evaluation");
+        if (!folders.hasNext()) {
+          Logger.log('Creating folder for student: ' + name + ', teacher: ' + teacherName);
+          var studentFolder = newStudentFolder.createFolder(folderName);
+          studentFolder.createFolder(name + "'s Lesson Notes");
+          studentFolder.createFolder(name + "'s Evaluation");
 
-          // Copy the template files into the new folder
-          var templateDoc = DriveApp.getFileById(templateDocId);
+          var templateId = teacherTemplates[teacherName];
+          if (!templateId) {
+            Logger.log('No template found for teacher: ' + teacherName);
+            continue;
+          }
+
+          var templateDoc = DriveApp.getFileById(templateId);
+          templateDoc.makeCopy(name + "'s Lesson Note", studentFolder);
           var templateSheet = DriveApp.getFileById(templateSheetId);
-          templateDoc.makeCopy(studentFolder);
-          templateSheet.makeCopy(studentFolder);
+          templateSheet.makeCopy(name + "'s Lesson History", studentFolder);
+          Logger.log('Copied template doc for student: ' + name + ', teacher: ' + teacherName);
         }
       }
     }
