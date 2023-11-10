@@ -1,4 +1,4 @@
-# 📚 Googledrive Automation with Google App Script
+# 📚 Google Drive Automation with Google App Script
 
 ## Introduction
 Welcome to the **Googledrive** repository! This project contains a Google App Script, `createStudentFolder.gs`, designed to automate the process of folder creation and organization in Google Drive using data from Google Spreadsheets.
